@@ -20,28 +20,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// compute_center
-Rcpp::NumericVector compute_center(Rcpp::RObject mat, int nthreads);
-RcppExport SEXP _BiocSingular_compute_center(SEXP matSEXP, SEXP nthreadsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::traits::input_parameter< Rcpp::RObject >::type mat(matSEXP);
-    Rcpp::traits::input_parameter< int >::type nthreads(nthreadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_center(mat, nthreads));
-    return rcpp_result_gen;
-END_RCPP
-}
-// compute_center_and_scale
-Rcpp::List compute_center_and_scale(Rcpp::RObject mat, int nthreads);
-RcppExport SEXP _BiocSingular_compute_center_and_scale(SEXP matSEXP, SEXP nthreadsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::traits::input_parameter< Rcpp::RObject >::type mat(matSEXP);
-    Rcpp::traits::input_parameter< int >::type nthreads(nthreadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_center_and_scale(mat, nthreads));
-    return rcpp_result_gen;
-END_RCPP
-}
 // compute_scale
 Rcpp::NumericVector compute_scale(Rcpp::RObject mat, Rcpp::NumericVector centers, int nthreads);
 RcppExport SEXP _BiocSingular_compute_scale(SEXP matSEXP, SEXP centersSEXP, SEXP nthreadsSEXP) {
@@ -57,8 +35,6 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_BiocSingular_set_executor", (DL_FUNC) &_BiocSingular_set_executor, 1},
-    {"_BiocSingular_compute_center", (DL_FUNC) &_BiocSingular_compute_center, 2},
-    {"_BiocSingular_compute_center_and_scale", (DL_FUNC) &_BiocSingular_compute_center_and_scale, 2},
     {"_BiocSingular_compute_scale", (DL_FUNC) &_BiocSingular_compute_scale, 3},
     {NULL, NULL, 0}
 };

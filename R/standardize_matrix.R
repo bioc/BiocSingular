@@ -32,19 +32,21 @@ standardize_matrix <- function(x, center=FALSE, scale=FALSE, deferred=FALSE, BPP
     return(X)
 }
 
-#' @importFrom beachmat initializeCpp
+#' @useDynLib BiocSingular
+#' @importFrom Rcpp sourceCpp
+#' @importFrom beachmat initializeCpp tatami.sums tatami.variances
 .compute_center_and_scale <- function(x, center, scale, nthreads) {
     if (isTRUE(center) && isTRUE(scale)) {
         ptr <- initializeCpp(x)
-        out <- compute_center_and_scale(ptr, nthreads)
-        center <- out$center
-        scale <- out$scale
+        out <- tatami.variances(ptr, row=FALSE, num.threads=nthreads)
+        center <- out$mean
+        scale <- sqrt(out$variance)
     }
 
     if (is.logical(center)) {
         if (center) {
             ptr <- initializeCpp(x)
-            center <- compute_center(ptr, nthreads)
+            center <- tatami.sums(ptr, row=FALSE, num.threads=nthreads) / nrow(x)
         } else {
             center <- NULL
         }

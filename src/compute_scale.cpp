@@ -1,7 +1,10 @@
 #include "Rtatami.h"
-#include "tatami_stats/tatami_stats.hpp"
+
 #include <cmath>
 #include <algorithm>
+#include <optional>
+#include <type_traits>
+
 #include "Rcpp.h"
 
 //[[Rcpp::export(rng=false)]]
@@ -10,131 +13,122 @@ SEXP set_executor(SEXP ptr) {
     return R_NilValue;
 }
 
-//' @useDynLib BiocSingular
-//' @importFrom Rcpp sourceCpp
-// [[Rcpp::export(rng=false)]]
-Rcpp::NumericVector compute_center(Rcpp::RObject mat, int nthreads) {
-    Rtatami::BoundNumericPointer bound(mat);
-    const auto& ptr = bound->ptr;
-    Rcpp::NumericVector output(ptr->ncol());
-    double NR = ptr->nrow();
+void compute_scale_direct(const tatami::NumericMatrix& mat, const double* cptr, double* optr, int nthreads) {
+    const auto NR = mat.nrow();
+    const auto NC = mat.ncol();
 
-    if (NR == 0) {
-        std::fill(output.begin(), output.end(), R_NaReal);
+    if (mat.is_sparse()) {
+        tatami::parallelize([&](size_t, int start, int len) -> void {
+            tatami::Options opt;
+            opt.sparse_extract_index = false;
+            auto ext = tatami::consecutive_extractor<true>(mat, false, start, len, opt);
+            std::vector<double> vbuffer(NR);
+
+            for (int c = start, end = start + len; c < end; ++c) {
+                auto range = ext->fetch(vbuffer.data(), NULL);
+                double center = cptr[c];
+
+                double tmp = 0;
+                for (int i = 0; i < range.number; ++i) {
+                    double diff = range.value[i] - center;
+                    tmp += diff * diff;
+                }
+
+                tmp += (NR - range.number) * center * center;
+                optr[c] = std::sqrt(tmp / static_cast<double>(NR - 1));
+            }
+        }, NC, nthreads);
+
     } else {
-        tatami_stats::sums::Options opt;
-        opt.num_threads = nthreads;
-        auto row_sums = tatami_stats::sums::by_column(ptr.get(), opt);
-        for (int c = 0, cend = ptr->ncol(); c < cend; ++c) {
-            output[c] = row_sums[c] / NR;
-        }
-    }
+        tatami::parallelize([&](size_t, int start, int len) -> void {
+            auto ext = tatami::consecutive_extractor<false>(mat, false, start, len);
+            std::vector<double> buffer(NR);
+            for (int c = start, end = start + len; c < end; ++c) {
+                auto ptr = ext->fetch(buffer.data());
+                double center = cptr[c];
 
-    return output;
+                double tmp = 0;
+                for (int r = 0; r < NR; ++r) {
+                    double diff = ptr[r] - center;
+                    tmp += diff * diff;
+                }
+                optr[c] = std::sqrt(tmp / static_cast<double>(NR - 1));
+            }
+        }, NC, nthreads);
+    }
 }
 
-// [[Rcpp::export(rng=false)]]
-Rcpp::List compute_center_and_scale(Rcpp::RObject mat, int nthreads) {
-    Rtatami::BoundNumericPointer bound(mat);
-    const auto& ptr = bound->ptr;
-    auto NR = ptr->nrow();
-    auto NC = ptr->ncol();
-
-    Rcpp::NumericVector center(NC), scale(NC);
-    double* cptr = static_cast<double*>(center.begin());
-    double* sptr = static_cast<double*>(scale.begin());
-
-    // Handling edge cases.
-    if (NR <= 1) {
-        if (NR == 0) {
-            std::fill(center.begin(), center.end(), R_NaReal);
-        } else {
-            auto iptr = ptr->dense_row()->fetch(0, cptr);
-            tatami::copy_n(iptr, NC, cptr);
-        }
-        std::fill(scale.begin(), scale.end(), R_NaReal);
-        return Rcpp::List::create(
-            Rcpp::Named("center") = center, 
-            Rcpp::Named("scale") = scale
-        );
+void compute_scale_running(const tatami::NumericMatrix& mat, const double* cptr, double* optr, int nthreads) {
+    const bool do_parallel = nthreads > 1;
+    std::optional<std::vector<std::optional<std::vector<double> > > > tmp_sums;
+    if (do_parallel) {
+        tmp_sums.emplace(sanisizer::cast<decltype(tmp_sums->size())>(nthreads - 1));
     }
 
-    if (ptr->prefer_rows()) {
-        if (ptr->sparse()) {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                auto ext = tatami::consecutive_extractor<true>(ptr.get(), true, 0, NR, start, len);
-                std::vector<double> vbuffer(len);
-                std::vector<int> ibuffer(len);
+    const bool is_sparse = mat.is_sparse();
+    const auto NR = mat.nrow();
+    const auto NC = mat.ncol();
 
-                std::vector<double> tmp_means(len), tmp_vars(len);
-                tatami_stats::variances::RunningSparse<double, double, int> runner(len, tmp_means.data(), tmp_vars.data(), false, start);
-                for (int r = 0; r < NR; ++r) {
-                    auto range = ext->fetch(r, vbuffer.data(), ibuffer.data());
-                    runner.add(range.value, range.index, range.number);
-                }
-                runner.finish();
-
-                std::copy(tmp_means.begin(), tmp_means.end(), cptr + start);
-                for (auto& v : tmp_vars) {
-                    v = std::sqrt(v);
-                }
-                std::copy(tmp_vars.begin(), tmp_vars.end(), sptr + start);
-            }, NC, nthreads);
-
+    const int nused = tatami::parallelize([&](int t, int start, int len) -> void {
+        std::optional<std::vector<double> > tmp_sum;
+        double* outptr;
+        if (t > 0) {
+            tmp_sum.emplace(tatami::cast_Index_to_container_size<std::vector<double> >(NC));
+            outptr = tmp_sum->data();
         } else {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                auto ext = tatami::consecutive_extractor<false>(ptr.get(), true, 0, NR, start, len);
-                std::vector<double> buffer(len);
-
-                std::vector<double> tmp_means(len), tmp_vars(len);
-                tatami_stats::variances::RunningDense<double, double, int> runner(len, tmp_means.data(), tmp_vars.data(), false);
-                for (int r = 0; r < NR; ++r) {
-                    auto ptr = ext->fetch(r, buffer.data());
-                    runner.add(ptr);
-                }
-                runner.finish();
-
-                std::copy(tmp_means.begin(), tmp_means.end(), cptr + start);
-                for (auto& v : tmp_vars) {
-                    v = std::sqrt(v);
-                }
-                std::copy(tmp_vars.begin(), tmp_vars.end(), sptr + start);
-            }, NC, nthreads);
+            // We assume that this is already zeroed by Rcpp.
+            outptr = optr;
         }
 
-    } else {
-        if (ptr->sparse()) {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                tatami::Options opt;
-                opt.sparse_extract_index = false;
-                auto ext = tatami::consecutive_extractor<true>(ptr.get(), false, start, len, opt);
-                std::vector<double> vbuffer(NR);
-                for (int c = start, end = start + len; c < end; ++c) {
-                    auto range = ext->fetch(c, vbuffer.data(), NULL);
-                    auto paired = tatami_stats::variances::direct(range.value, range.number, NR, false);
-                    cptr[c] = paired.first;
-                    sptr[c] = std::sqrt(paired.second);
+        if (is_sparse) { 
+            auto ext = tatami::consecutive_extractor<true>(mat, true, start, len);
+            std::vector<double> vbuffer(NC);
+            std::vector<int> ibuffer(NC);
+            std::vector<int> nonzeros(NC);
+
+            for (int r = 0; r < len; ++r) {
+                auto range = ext->fetch(vbuffer.data(), ibuffer.data());
+                for (int i = 0; i < range.number; ++i) {
+                    double diff = range.value[i] - cptr[range.index[i]];
+                    outptr[range.index[i]] += diff * diff;
+                    ++nonzeros[range.index[i]];
                 }
-            }, NC, nthreads);
+            }
+
+            for (int c = 0; c < NC; ++c) {
+                outptr[c] += cptr[c] * cptr[c] * (len - nonzeros[c]);
+            }
 
         } else {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                auto ext = tatami::consecutive_extractor<false>(ptr.get(), false, start, len);
-                std::vector<double> buffer(NR);
-                for (int c = start, end = start + len; c < end; ++c) {
-                    auto ptr = ext->fetch(c, buffer.data());
-                    auto paired = tatami_stats::variances::direct(ptr, NR, false);
-                    cptr[c] = paired.first;
-                    sptr[c] = std::sqrt(paired.second);
+            auto ext = tatami::consecutive_extractor<false>(mat, true, start, len);
+            std::vector<double> buffer(NC);
+
+            for (int r = 0; r < len; ++r) {
+                auto ptr = ext->fetch(buffer.data());
+                for (int c = 0; c < NC; ++c) {
+                    double diff = ptr[c] - cptr[c];
+                    outptr[c] += diff * diff;
                 }
-            }, NC, nthreads);
+            }
+        }
+
+        if (t > 0) {
+            (*tmp_sums)[t - 1] = std::move(tmp_sum);
+        }
+    }, NR, nthreads);
+
+    if (do_parallel) {
+        for (int u = 1; u < nused; ++u) {
+            const auto& cursums = *((*tmp_sums)[u - 1]);
+            for (int c = 0; c < NC; ++c) {
+                optr[c] += cursums[c];
+            }
         }
     }
 
-    return Rcpp::List::create(
-        Rcpp::Named("center") = center, 
-        Rcpp::Named("scale") = scale
-    );
+    for (int c = 0; c < NC; ++c) {
+        optr[c] = std::sqrt(optr[c] / static_cast<double>(NR - 1));
+    }
 }
 
 // [[Rcpp::export(rng=false)]]
@@ -149,106 +143,15 @@ Rcpp::NumericVector compute_scale(Rcpp::RObject mat, Rcpp::NumericVector centers
     }
 
     Rcpp::NumericVector output(NC);
-    double* optr = static_cast<double*>(output.begin());
-    const double* cptr = static_cast<const double*>(centers.begin());
-
-    // Handling edge cases.
     if (NR <= 1) {
-        std::fill(output.begin(), output.end(), R_NaReal);
+        std::fill(output.begin(), output.end(), std::numeric_limits<double>::quiet_NaN());
         return output;
     }
 
     if (ptr->prefer_rows()) {
-        if (ptr->sparse()) {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                auto ext = tatami::consecutive_extractor<true>(ptr.get(), true, 0, NR, start, len);
-
-                std::vector<double> vbuffer(len);
-                std::vector<int> ibuffer(len);
-                std::vector<double> tmp_vars(len);
-                std::vector<int> nonzeros(len);
-
-                for (int r = 0; r < NR; ++r) {
-                    auto range = ext->fetch(r, vbuffer.data(), ibuffer.data());
-                    for (int i = 0; i < range.number; ++i) {
-                        double diff = range.value[i] - cptr[range.index[i]];
-                        auto offset = range.index[i] - start;
-                        tmp_vars[offset] += diff * diff;
-                        ++nonzeros[offset];
-                    }
-                }
-
-                for (int i = 0; i < len; ++i) {
-                    double center = cptr[i + start];
-                    double v = tmp_vars[i] + (NR - nonzeros[i]) * center * center;
-                    optr[start + i] = std::sqrt(v / static_cast<double>(NR - 1));
-                }
-            }, NC, nthreads);
-
-        } else {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                auto ext = tatami::consecutive_extractor<false>(ptr.get(), true, 0, NR, start, len);
-
-                std::vector<double> buffer(len);
-                std::vector<double> tmp_vars(len);
-                std::vector<int> nonzeros(len);
-
-                for (int r = 0; r < NR; ++r) {
-                    auto ptr = ext->fetch(r, buffer.data());
-                    for (int i = 0; i < len; ++i) {
-                        double diff = ptr[i] - cptr[i + start];
-                        tmp_vars[i] += diff * diff;
-                    }
-                }
-
-                for (auto& v : tmp_vars) {
-                    v = std::sqrt(v / static_cast<double>(NR - 1));
-                }
-                std::copy(tmp_vars.begin(), tmp_vars.end(), optr + start);
-            }, NC, nthreads);
-        }
-
+        compute_scale_running(*ptr, centers.begin(), output.begin(), nthreads);
     } else {
-        if (ptr->sparse()) {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                tatami::Options opt;
-                opt.sparse_extract_index = false;
-                auto ext = tatami::consecutive_extractor<true>(ptr.get(), false, start, len, opt);
-                std::vector<double> vbuffer(NR);
-
-                for (int c = start, end = start + len; c < end; ++c) {
-                    auto range = ext->fetch(c, vbuffer.data(), NULL);
-                    double center = cptr[c];
-
-                    double tmp = 0;
-                    for (int i = 0; i < range.number; ++i) {
-                        double diff = range.value[i] - center;
-                        tmp += diff * diff;
-                    }
-
-                    tmp += (NR - range.number) * center * center;
-                    optr[c] = std::sqrt(tmp / static_cast<double>(NR - 1));
-                }
-            }, NC, nthreads);
-
-        } else {
-            tatami::parallelize([&](size_t, int start, int len) -> void {
-                auto ext = tatami::consecutive_extractor<false>(ptr.get(), false, start, len);
-                std::vector<double> buffer(NR);
-                for (int c = start, end = start + len; c < end; ++c) {
-                    auto ptr = ext->fetch(c, buffer.data());
-                    double center = cptr[c];
-
-                    double tmp = 0;
-                    for (int r = 0; r < NR; ++r) {
-                        double diff = ptr[r] - center;
-                        tmp += diff * diff;
-                    }
-                    optr[c] = std::sqrt(tmp / static_cast<double>(NR - 1));
-                }
-            }, NC, nthreads);
-        }
+        compute_scale_direct(*ptr, centers.begin(), output.begin(), nthreads);
     }
-
     return output;
 }

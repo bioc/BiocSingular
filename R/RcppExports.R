@@ -5,16 +5,6 @@ set_executor <- function(ptr) {
     .Call('_BiocSingular_set_executor', PACKAGE = 'BiocSingular', ptr)
 }
 
-#' @useDynLib BiocSingular
-#' @importFrom Rcpp sourceCpp
-compute_center <- function(mat, nthreads) {
-    .Call('_BiocSingular_compute_center', PACKAGE = 'BiocSingular', mat, nthreads)
-}
-
-compute_center_and_scale <- function(mat, nthreads) {
-    .Call('_BiocSingular_compute_center_and_scale', PACKAGE = 'BiocSingular', mat, nthreads)
-}
-
 compute_scale <- function(mat, centers, nthreads) {
     .Call('_BiocSingular_compute_scale', PACKAGE = 'BiocSingular', mat, centers, nthreads)
 }

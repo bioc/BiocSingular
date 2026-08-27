@@ -32,7 +32,6 @@ test_that("center and scale calculations work correctly", {
             out <- BiocSingular:::.compute_center_and_scale(A, center=TRUE, scale=FALSE, nthreads=n)
             expect_equal(out$center, colMeans(A0))
             expect_null(out$scale)
-            expect_equal(out$center, BiocSingular:::compute_center(beachmat::initializeCpp(A), n))
 
             out <- BiocSingular:::.compute_center_and_scale(A, center=TRUE, scale=TRUE, nthreads=n)
             expect_equal(out$center, colMeans(A0))
@@ -67,13 +66,13 @@ test_that("center and scale calculations work for edge cases", {
 
         out <- BiocSingular:::.compute_center_and_scale(A, center=TRUE, scale=TRUE, nthreads=1)
         expect_identical(out$center, A[1,])
-        expect_identical(out$scale, rep(NA_real_, 10))
+        expect_identical(out$scale, rep(NaN, 10))
 
         out <- BiocSingular:::.compute_center_and_scale(A, center=TRUE, scale=FALSE, nthreads=1)
         expect_identical(out$center, A[1,])
 
         out <- BiocSingular:::.compute_center_and_scale(A, center=FALSE, scale=TRUE, nthreads=1)
-        expect_identical(out$scale, rep(NA_real_, 10))
+        expect_identical(out$scale, rep(NaN, 10))
     }
 
     for (it in 1:4) {
@@ -84,14 +83,14 @@ test_that("center and scale calculations work for edge cases", {
         }
 
         out <- BiocSingular:::.compute_center_and_scale(A, center=TRUE, scale=TRUE, nthreads=1)
-        expect_identical(out$center, rep(NA_real_, 10))
-        expect_identical(out$scale, rep(NA_real_, 10))
+        expect_identical(out$center, rep(NaN, 10))
+        expect_identical(out$scale, rep(NaN, 10))
 
         out <- BiocSingular:::.compute_center_and_scale(A, center=TRUE, scale=FALSE, nthreads=1)
-        expect_identical(out$center, rep(NA_real_, 10))
+        expect_identical(out$center, rep(NaN, 10))
 
         out <- BiocSingular:::.compute_center_and_scale(A, center=FALSE, scale=TRUE, nthreads=1)
-        expect_identical(out$scale, rep(NA_real_, 10))
+        expect_identical(out$scale, rep(NaN, 10))
     }
 
     empty <- matrix(0, 10, 0)
