@@ -39,35 +39,51 @@ import(methods)
 importClassesFrom(BiocParallel,MulticoreParam)
 importClassesFrom(DelayedArray,DelayedMatrix)
 importClassesFrom(Matrix,dgCMatrix)
-importFrom(BiocGenerics,ncol)
-importFrom(BiocGenerics,nrow)
-importFrom(BiocParallel,SerialParam)
-importFrom(BiocParallel,bpisup)
-importFrom(BiocParallel,bpnworkers)
-importFrom(BiocParallel,bpstart)
-importFrom(BiocParallel,bpstop)
-importFrom(DelayedArray,DelayedArray)
-importFrom(DelayedArray,drop)
-importFrom(DelayedArray,extract_array)
-importFrom(DelayedArray,getAutoBPPARAM)
-importFrom(DelayedArray,new_DelayedArray)
-importFrom(DelayedArray,seed)
-importFrom(DelayedArray,setAutoBPPARAM)
-importFrom(DelayedArray,sweep)
-importFrom(Matrix,crossprod)
-importFrom(Matrix,t)
-importFrom(Matrix,tcrossprod)
+importFrom(BiocGenerics,
+  ncol,
+  nrow
+)
+importFrom(BiocParallel,
+  SerialParam,
+  bpisup,
+  bpnworkers,
+  bpstart,
+  bpstop
+)
+importFrom(DelayedArray,
+  DelayedArray,
+  drop,
+  extract_array,
+  getAutoBPPARAM,
+  new_DelayedArray,
+  seed,
+  setAutoBPPARAM,
+  sweep
+)
+importFrom(Matrix,
+  crossprod,
+  t,
+  tcrossprod
+)
 importFrom(Rcpp,sourceCpp)
 importFrom(S4Vectors,setValidity2)
-importFrom(ScaledMatrix,ScaledMatrix)
-importFrom(ScaledMatrix,ScaledMatrixSeed)
-importFrom(beachmat,getExecutor)
-importFrom(beachmat,initializeCpp)
+importFrom(ScaledMatrix,
+  ScaledMatrix,
+  ScaledMatrixSeed
+)
+importFrom(beachmat,
+  getExecutor,
+  initializeCpp,
+  tatami.sums,
+  tatami.variances
+)
 importFrom(irlba,irlba)
-importFrom(methods,hasMethod)
-importFrom(methods,is)
-importFrom(methods,new)
-importFrom(methods,show)
+importFrom(methods,
+  hasMethod,
+  is,
+  new,
+  show
+)
 importFrom(rsvd,rsvd)
 importFrom(utils,head)
 useDynLib(BiocSingular)
