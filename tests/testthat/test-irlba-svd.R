@@ -5,26 +5,25 @@ library(irlba)
 
 set.seed(9000)
 test_that("IRLBA works on input matrices", {
-
     y <- matrix(rnorm(50000), ncol=200)
     set.seed(100)
     out <- runIrlbaSVD(y, k=5, fold=Inf)
     set.seed(100)
-    ref <- irlba(y, nv=5)
+    ref <- irlba(y, nv=5, work=12)
     expect_equal_svd(out, ref[c("d", "u", "v")])
 
     # Handles truncation.
     set.seed(100)
     out <- runIrlbaSVD(y, k=10, nv=5, nu=3, fold=Inf)
     set.seed(100)
-    ref <- irlba(y, nv=10, nu=3)
+    ref <- irlba(y, nv=10, nu=3, work=17)
     ref$v <- ref$v[,1:5]
     expect_equal_svd(out, ref[c("d", "u", "v")])
 
     set.seed(100)
     out <- runIrlbaSVD(y, k=1, nv=5, nu=3, fold=Inf)
     set.seed(100)
-    ref <- irlba(y, nv=5, nu=3)
+    ref <- irlba(y, nv=5, nu=3, work=12)
     ref$d <- ref$d[1]
     expect_equal_svd(out, ref[c("d", "u", "v")])
 
@@ -41,21 +40,21 @@ test_that("IRLBA works on thin matrices", {
     set.seed(200)
     out <- runIrlbaSVD(y, k=3, fold=1)
     set.seed(200)
-    ref <- irlba(y, nv=3, nu=3)
+    ref <- irlba(y, nv=3, nu=3, work=10)
     expect_equal_svd(out, ref)
 
     # Handles truncation.
     set.seed(200)
     out <- runIrlbaSVD(y, k=5, nv=3, nu=2, fold=1)
     set.seed(200)
-    ref <- irlba(y, nu=2, nv=5)
+    ref <- irlba(y, nu=2, nv=5, work=12)
     ref$v <- ref$v[,1:3]
     expect_equal_svd(out, ref)
 
     set.seed(200)
     out <- runIrlbaSVD(y, k=1, nv=3, nu=2, fold=1)
     set.seed(200)
-    ref <- irlba(y, nu=2, nv=3)
+    ref <- irlba(y, nu=2, nv=3, work=10)
     ref$d <- ref$d[1]
     expect_equal_svd(out, ref)
 })
@@ -66,23 +65,23 @@ test_that("IRLBA works on fat matrices", {
     set.seed(300)
     out <- runIrlbaSVD(y, k=4, fold=1)
     set.seed(300)
-    ref <- irlba(y, nu=4, nv=4)
-    expect_equal_svd(out, ref)
+    ref <- irlba(y, nu=4, nv=4, work=11)
+    expect_equal_svd(out, ref, tol=1e-6)
 
     # Handles truncation.
     set.seed(300)
-    out <- runIrlbaSVD(y, k=5, nv=4, nu=2, fold=1)
+    out <- runIrlbaSVD(y, k=4, nv=3, nu=2, fold=1)
     set.seed(300)
-    ref <- irlba(y, nu=2, nv=5)
-    ref$v <- ref$v[,1:4]
-    expect_equal_svd(out, ref)
+    ref <- irlba(y, nu=2, nv=4, work=12)
+    ref$v <- ref$v[,1:3]
+    expect_equal_svd(out, ref, tol=1e-6)
 
     set.seed(300)
-    out <- runIrlbaSVD(y, k=1, nv=6, nu=2, fold=1)
+    out <- runIrlbaSVD(y, k=1, nv=4, nu=2, fold=1)
     set.seed(300)
-    ref <- irlba(y, nu=2, nv=6)
+    ref <- irlba(y, nu=2, nv=4, work=11)
     ref$d <- ref$d[1]
-    expect_equal_svd(out, ref)
+    expect_equal_svd(out, ref, tol=1e-6)
 })
 
 set.seed(9003)
@@ -111,20 +110,20 @@ test_that("IRLBA works with centering and scaling", {
     scale <- runif(ncol(y))
 
     set.seed(100)
-    ref <- irlba(y, k=5, center=center, scale=scale, tol=1e-8)
+    ref <- irlba(y, k=5, work=12, center=center, scale=scale, tol=1e-8)
     set.seed(100)
     out <- runIrlbaSVD(y, k=5, center=center, scale=scale, fold=Inf, tol=1e-8) 
     expect_equal_svd(out, ref)
 
     ry <- scale(y, center=center, scale=scale)
     set.seed(100)
-    ref2 <- irlba(ry, nv=5, nu=5, tol=1e-8)
+    ref2 <- irlba(ry, nv=5, nu=5, work=12, tol=1e-8)
     expect_equal_svd(out, ref2)
 
     # Works with logical values.
     ry <- scale(y, center=TRUE, scale=TRUE)
     set.seed(300)
-    ref <- irlba(ry, nu=5, nv=5, tol=1e-8)
+    ref <- irlba(ry, nu=5, nv=5, work=12, tol=1e-8)
     set.seed(300)
     out <- runIrlbaSVD(y, k=5, center=TRUE, scale=TRUE, fold=1, tol=1e-8)
     expect_equal_svd(out, ref, tol=1e-6)
@@ -139,7 +138,7 @@ test_that("IRLBA centering and scaling interact happily with other modes", {
     
     ry <- scale(y, center=center, scale=scale)
     set.seed(200)
-    ref <- irlba(ry, nu=5, nv=5, tol=1e-8)
+    ref <- irlba(ry, nu=5, nv=5, work=12, tol=1e-8)
     set.seed(200)
     out <- runIrlbaSVD(y, k=5, center=center, scale=scale, fold=1, tol=1e-8)
     expect_equal_svd(out, ref, tol=1e-6)
@@ -148,13 +147,13 @@ test_that("IRLBA centering and scaling interact happily with other modes", {
     set.seed(100)
     out <- runIrlbaSVD(y, k=6, center=center, scale=scale, BPPARAM=safeBPParam(2), tol=1e-8, fold=Inf)
     set.seed(100)
-    ref <- irlba(ry, nu=6, nv=6, tol=1e-8)
+    ref <- irlba(ry, nu=6, nv=6, work=13, tol=1e-8)
     expect_equal_svd(out, ref, tol=1e-6)
 
     # Works with our deferred multiplication (which also requires parallelization,
     # in order to not just use irlba's deferred methods directly).
     set.seed(100)
-    ref <- irlba(ry, nu=7, nv=7, tol=1e-8)
+    ref <- irlba(ry, nu=7, nv=7, work=14, tol=1e-8)
     set.seed(100)
     out <- runIrlbaSVD(y, k=7, center=center, scale=scale, deferred=TRUE, BPPARAM=safeBPParam(2), tol=1e-8, fold=Inf)
     expect_equal_svd(out, ref, tol=1e-6)

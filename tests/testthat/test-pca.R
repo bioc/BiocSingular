@@ -34,7 +34,7 @@ test_that("runPCA with approximate SVD (IRLBA) matches up to the reference imple
     set.seed(200)
     out <- runPCA(a, rank=10, BSPARAM=IrlbaParam(fold=Inf))
     set.seed(200)
-    ref <- irlba::prcomp_irlba(a, n=10)
+    ref <- irlba::prcomp_irlba(a, n=10, work=17)
 
     expect_equal(out$sdev, ref$sdev)
     expect_equal_besides_sign(out$rotation, ref$rotation)
